@@ -13,7 +13,7 @@ ellipsodesk/
 packaging/         桌面打包三件套（spec/图标/构建脚本，阶段 2 创建）
 .github/workflows/ CI build.yml（macOS arm64 / Windows x64 双平台）
 ```
-`data/`（原始 spe）与 `analysis/`（materials/、results/ 本地材料与历史结果）不入库。已知断链：material_lib.MATERIALS_DIR 解析为 ellipsodesk/materials（不存在），阶段 2 迁 platformdirs 用户数据目录；fit_app 侧材料路径仍指 analysis/materials（本地有效）。
+`data/`（原始 spe）与 `analysis/`（materials/、results/ 本地材料与历史结果）不入库。已知断链（双路径并存，阶段 2 platformdirs 迁移统一修复）：material_lib.MATERIALS_DIR 指向代码包内 ellipsodesk/materials——git 克隆后不存在（gitignore 排除），ensure_base_materials() 启动自动重建，材料的**列表/查看/保存**链路有效；fit_app 侧 4 处（make_preset_layer 插入、材料文档读取、mat_rename、mat_delete）走 `ROOT/analysis/materials`（ROOT=仓库根，该路径**不存在**）——双击插入**静默失败**（_insert_material 吞 FileNotFoundError，阶段 2 一并加失败提示）。
 
 ## §2 运行与分发
 - 开发：GUI `streamlit run ellipsodesk/gui/fit_app.py`；批量 `python ellipsodesk/scripts/run_analysis.py` → `python ellipsodesk/scripts/make_report.py`
@@ -34,7 +34,7 @@ packaging/         桌面打包三件套（spec/图标/构建脚本，阶段 2 �
 - 色散模型选型：透明膜（SiO₂ 等）Cauchy/Sellmeier；吸收膜（富硅 SiN、a-Si、poly-Si）Tauc-Lorentz（数值 KK）；多孔/混合膜 Bruggeman EMA
 - 参数边界（勿收窄）：Cauchy A∈[1.30,3.00]；TL E0∈[3.0,12]
 - 初值策略：Δ 条纹 FFT 估 d（fit.fringe_thickness_guess）+ 文献参数初值；禁止随机初值；多起点只对 d 撒种子
-- 目标函数：默认 Is/Ic 最小二乘（避开 Δ 360° 卷绕），可切 Ψ/Δ；scipy.optimize.least_squares，无 lmfit
+- 目标函数：Is/Ic 最小二乘（避开 Δ 360° 卷绕；Ψ/Δ 由拟合结果直接计算，无目标切换参数）；scipy.optimize.least_squares，无 lmfit
 - 返回值契约：fit_stack / fit_single_sio2 返回 seeds_info + seed_consistency（±0.5 nm 一致）+ eV_fine/Psi_fit_fine/Delta_fit_fine/layer_nk_fine（2N−1 细网格，供模型线绘图）；多起点局部优化不保证全局最优
 - 全局最优验证：stack_fit.profile_thickness 做 χ²(d) 剖面，每点双起点 = 全局最优参数 + 延续（单一热启动会在真谷陷入固定 d 局部极小）
 - EMA 取根：本库 N=n−ik 要求 Im(ε)≤0，非无源根罚 1e6 后再取 |Im| 最小（纯 min|Im| 在吸收宿主下选非无源分支）

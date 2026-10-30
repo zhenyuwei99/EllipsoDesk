@@ -2,6 +2,9 @@ __pycache__/
 *.pyc
 .DS_Store
 ellipsodesk/materials/
+ellipsodesk/results/
+.trash/
+data/
 *.egg-info/
 build/
 dist/

@@ -26,11 +26,13 @@ EllipsoDesk 是一个光谱椭偏数据多层膜厚拟合工具：读取 Horiba 
 - **macOS**：应用未做签名公证，首次打开需右键点击 →「打开」，或在终端执行 `xattr -cr /Applications/EllipsoDesk.app` 后再启动
 - **Windows**：SmartScreen 拦截时点击「更多信息」→「仍要运行」
 
+> CI 自动构建与 Releases 资产由后续 GitHub Actions 工作流产出；当前请从源码运行（见下方开发者指南）。
+
 ## 开发者指南
 
 ### 环境要求
 
-- Python ≥ 3.12，依赖：numpy、scipy、pandas、matplotlib、plotly、streamlit、pyyaml（**无需 lmfit**）
+- Python ≥ 3.12，依赖：numpy、scipy、pandas、plotly、streamlit、pyyaml、platformdirs（**无需 lmfit**；绘图全部使用 plotly）
 - c-Si 衬底光学常数内置文献表（Aspnes-Studna / Green 2008 / Salzberg-Villa），完全离线运行
 
 ### 启动 GUI 工作台
@@ -57,8 +59,8 @@ EllipsoDesk/
 │   ├── scripts/        # 拟合引擎与 CLI（spe_parser / tmm / dispersion / fit / stack_fit / material_lib …）
 │   ├── gui/            # Streamlit 工作台（fit_app.py + 文件浏览器组件）
 │   └── stacks/         # 多层堆叠定义 YAML
-├── packaging/          # 桌面应用打包（spec / 图标 / 构建脚本）
-├── .github/workflows/  # CI：双平台构建发布
+├── packaging/          # 桌面应用打包（阶段 2 创建：launcher / spec / requirements）
+├── .github/workflows/  # CI：双平台构建发布（阶段 3 创建 build.yml）
 ├── AGENTS.md           # 项目契约：格式规格 / 拟合引擎 / GUI 契约 / 已知边界
 ├── README.md
 └── .gitignore
