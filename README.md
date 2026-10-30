@@ -44,12 +44,28 @@ streamlit run ellipsodesk/gui/fit_app.py
 ### 批量管线
 
 ```bash
-# 批量拟合 data/RAW-DATA 下全部 .spe → results/summary.csv + results.json
+# 批量拟合 data/RAW-DATA 下全部 .spe → 当前目录 results/（summary.csv + results.json）
 python ellipsodesk/scripts/run_analysis.py
 
-# 由 results.json 生成单文件交互 HTML 报告
+# 由 results.json 生成单文件交互 HTML 报告（→ ./results/report.html）
 python ellipsodesk/scripts/make_report.py
+
+# 可选：--spe <文件…> 显式指定光谱，--out <目录> 覆盖输入/输出基准（均相对 CWD）
 ```
+
+### 本地打包（桌面应用）
+
+在干净的 Python 3.12 venv 中执行（依赖宽松下限见 `packaging/requirements-pack.txt`）：
+
+```bash
+python -m venv .venv-pack && source .venv-pack/bin/activate   # Windows: .venv-pack\Scripts\activate
+pip install -r packaging/requirements-pack.txt
+pyinstaller packaging/launcher.spec
+# 产物：dist/EllipsoDesk/（onedir；launcher 自动选空闲端口拉起内嵌 Streamlit 并开 pywebview 窗口）
+# macOS 的 .app/.dmg 与 Windows 安装包封装由 CI 负责
+```
+
+开发态也可直接 `python packaging/launcher.py` 拉起窗口（无 pywebview 时自动退化为系统浏览器）。
 
 ## 目录结构
 
@@ -59,7 +75,7 @@ EllipsoDesk/
 │   ├── scripts/        # 拟合引擎与 CLI（spe_parser / tmm / dispersion / fit / stack_fit / material_lib …）
 │   ├── gui/            # Streamlit 工作台（fit_app.py + 文件浏览器组件）
 │   └── stacks/         # 多层堆叠定义 YAML
-├── packaging/          # 桌面应用打包（阶段 2 创建：launcher / spec / requirements）
+├── packaging/          # 桌面应用打包：launcher.py（启动入口）/ launcher.spec（PyInstaller）/ requirements-pack.txt
 ├── .github/workflows/  # CI：双平台构建发布（阶段 3 创建 build.yml）
 ├── AGENTS.md           # 项目契约：格式规格 / 拟合引擎 / GUI 契约 / 已知边界
 ├── README.md

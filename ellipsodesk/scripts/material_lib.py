@@ -1,13 +1,40 @@
 import json
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import platformdirs
 
 from dispersion import MODELS
 
-MATERIALS_DIR = Path(__file__).resolve().parent.parent / "materials"
+# 用户数据目录（platformdirs，单一真源）：macOS ~/Library/Application Support/EllipsoDesk，
+# Windows %APPDATA%/EllipsoDesk（appauthor=False 免去多余层级）。GUI/CLI 材料链路全部经此。
+DATA_DIR = Path(platformdirs.user_data_dir("EllipsoDesk", appauthor=False))
+MATERIALS_DIR = DATA_DIR / "materials"
+
+# 旧版材料目录（代码包内，gitignore 排除）——仅作一次性迁移源，不再读写。
+_LEGACY_MATERIALS_DIR = Path(__file__).resolve().parent.parent / "materials"
+
+
+def _migrate_legacy_materials():
+    """一次性迁移：代码包内旧 materials/ 的用户材料（非 base-*.json）拷入用户数据目录。
+
+    base 基料不拷（ensure_base_materials() 会自动重建）；目标同名已存在则跳过，可安全重复执行。
+    """
+    if not _LEGACY_MATERIALS_DIR.is_dir():
+        return
+    MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
+    for p in sorted(_LEGACY_MATERIALS_DIR.glob("*.json")):
+        if p.name.startswith("base-"):
+            continue
+        dst = MATERIALS_DIR / p.name
+        if not dst.exists():
+            shutil.copy2(p, dst)
+
+
+_migrate_legacy_materials()
 
 def save_material(name, model, params, errs, eV_range, provenance):
     MATERIALS_DIR.mkdir(parents=True, exist_ok=True)

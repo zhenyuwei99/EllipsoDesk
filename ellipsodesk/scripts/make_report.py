@@ -9,7 +9,7 @@ from plotly.subplots import make_subplots
 
 from psi_display import unfold_psi
 
-RESULTS = Path(__file__).resolve().parent.parent / "results"
+RESULTS = Path("results")   # CWD 相对输出基准（--out 可覆盖）；不再写进代码包
 EV_NM = 1239.841984
 
 def wrap360(a):
@@ -83,8 +83,9 @@ def sample_fig(s):
     fig.update_yaxes(title_text="k", showgrid=False, row=2, col=2, secondary_y=True)
     return fig.to_html(full_html=False, include_plotlyjs=False)
 
-def main():
-    doc = json.loads((RESULTS / "results.json").read_text(encoding="utf-8"))
+def main(out_dir=None):
+    results = Path(out_dir) if out_dir else RESULTS
+    doc = json.loads((results / "results.json").read_text(encoding="utf-8"))
     samples = doc["samples"]
     stack = doc["stack"]
 
@@ -151,9 +152,15 @@ def main():
                 "</div>")
 
     html.append("</div></body></html>")
-    out = RESULTS / "report.html"
+    out = results / "report.html"
     out.write_text("".join(html), encoding="utf-8")
-    print(f"wrote {out} ({out.stat().st_size/1e6:.2f} MB)")
+    print(f"wrote {out.resolve()} ({out.stat().st_size/1e6:.2f} MB)")
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser(
+        description="由 ./results/results.json 生成单文件交互 HTML 报告")
+    ap.add_argument("--out", default=None,
+                    help="结果目录（默认 ./results，CWD 相对；report.html 也写在此）")
+    a = ap.parse_args()
+    main(a.out)

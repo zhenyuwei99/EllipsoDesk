@@ -11,12 +11,13 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
-ROOT = SCRIPTS.parent.parent
+ROOT = Path.home()  # Explorer 浏览根 = 用户主目录（阶段 2 / ADV-5；containment 见 _in_root）
 sys.path.insert(0, str(SCRIPTS))
 
 from dispersion import MODELS
 from fit import FIT_EV_MAX, FIT_EV_MIN, fringe_thickness_guess
-from material_lib import ensure_base_materials, list_materials_meta, load_material, save_material
+from material_lib import (DATA_DIR, MATERIALS_DIR, ensure_base_materials,
+                          list_materials_meta, load_material, save_material)
 from spe_parser import parse_spe
 from stack_fit import fit_stack, profile_thickness
 from psi_display import unfold_psi
@@ -107,7 +108,7 @@ def make_fit_layer(name, model="cauchy", thickness=1000.0):
 
 def make_preset_layer(mat_name):
     """从材料库构造预设层：该材料的模型 + 参数（全部 fixed），厚度=标定值（默认拟合）。"""
-    doc = json.loads((ROOT / "analysis" / "materials" / f"{mat_name}.json")
+    doc = json.loads((MATERIALS_DIR / f"{mat_name}.json")
                      .read_text(encoding="utf-8"))
     model = doc.get("model", "cauchy")
     spec = MODELS[model]
@@ -121,7 +122,7 @@ def make_preset_layer(mat_name):
 
 
 def _read_material_doc(mat_name):
-    return json.loads((ROOT / "analysis" / "materials" / f"{mat_name}.json")
+    return json.loads((MATERIALS_DIR / f"{mat_name}.json")
                       .read_text(encoding="utf-8"))
 
 
@@ -318,14 +319,36 @@ def _on_fx_event(ev):
         _begin_mat_delete(p)
 
 
+def _load_nav_default():
+    """上次浏览目录（持久化于用户数据目录 last_dir.json）；无记录/目录已消失则回退用户主目录。"""
+    try:
+        doc = json.loads((DATA_DIR / "last_dir.json").read_text(encoding="utf-8"))
+        d = Path(doc.get("dir") or Path.home())
+        return str(d) if d.is_dir() else str(Path.home())
+    except Exception:
+        return str(Path.home())
+
+
+def _save_nav_dir(path):
+    """目录切换时持久化上次目录；写入失败静默忽略（只读介质/权限等，不影响浏览）。"""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        (DATA_DIR / "last_dir.json").write_text(
+            json.dumps({"dir": str(path)}, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _nav_to(path):
     st.session_state["nav_dir"] = str(path)
+    _save_nav_dir(path)
 
 
 def _nav_up():
     cur = Path(st.session_state.nav_dir)
     if cur.parent != cur:
         st.session_state["nav_dir"] = str(cur.parent)
+        _save_nav_dir(cur.parent)
 
 
 def _sel_spe(path):
@@ -394,6 +417,11 @@ def _insert_material(mat_name):
     try:
         doc = _read_material_doc(mat_name)
     except FileNotFoundError:
+        st.toast(f"材料 {mat_name}.json 不在材料库目录（{MATERIALS_DIR}），插入失败",
+                 icon=":material/error:")
+        return
+    except (OSError, json.JSONDecodeError) as exc:
+        st.toast(f"材料 {mat_name}.json 读取失败：{exc}", icon=":material/error:")
         return
     lay = make_base_layer(mat_name) if doc.get("kind") == "base" else make_preset_layer(mat_name)
     st.session_state.layers.append(lay)
@@ -556,7 +584,7 @@ def delete_dialog(path):
 @st.dialog("重命名材料", width="small", on_dismiss=_clear_dialog)
 def mat_rename_dialog(name):
     new = st.text_input("新材料名", key="mr_name")
-    mats_dir = ROOT / "analysis" / "materials"
+    mats_dir = MATERIALS_DIR
     dst = mats_dir / f"{new}.json"
     valid = new and new != name and new.isidentifier() and not dst.exists()
     if new and not valid:
@@ -582,7 +610,7 @@ def mat_delete_dialog(name):
         st.caption("内置基料（文献典型初值）——删除后下次启动自动重建。")
     st.warning(f"将把材料 **{name}** 移入回收站 `.trash/`（可手动找回）。")
     if st.button("确认移入回收站", icon=":material/delete:", type="primary", key="mdel_ok"):
-        _to_trash(ROOT / "analysis" / "materials" / f"{name}.json")
+        _to_trash(MATERIALS_DIR / f"{name}.json")
         st.session_state.dialog = None
         st.rerun()
 
@@ -616,7 +644,7 @@ def mat_view_dialog(name):
 def render_sidebar():
     for k, v in [("angle", 70.0), ("ev_min", FIT_EV_MIN), ("ev_max", FIT_EV_MAX), ("clean", True)]:
         st.session_state.setdefault(k, v)
-    st.session_state.setdefault("nav_dir", str(ROOT / "data"))
+    st.session_state.setdefault("nav_dir", _load_nav_default())
     ensure_base_materials()   # 基料缺失自动重建（删除后下次启动恢复）
     with st.sidebar:
         st.header("🗂 Explorer")

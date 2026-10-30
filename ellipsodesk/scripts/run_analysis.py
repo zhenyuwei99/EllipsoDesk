@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from spe_parser import find_spe_files
 from stack_fit import fit_stack, load_stack
 
-RESULTS = Path(__file__).resolve().parent.parent / "results"
+RESULTS = Path("results")   # CWD 相对输出基准（--out 可覆盖）；不再写进代码包
 
-def main(stack_yaml=None, spe_files=None):
+def main(stack_yaml=None, spe_files=None, out_dir=None):
     stack_yaml = stack_yaml or Path(__file__).resolve().parent.parent / "stacks" / "sio2_on_si.yaml"
     stack = load_stack(stack_yaml)
     files = spe_files or find_spe_files()
@@ -72,22 +72,28 @@ def main(stack_yaml=None, spe_files=None):
         })
         print(f"{Path(f).name:<40} d={rows[-1]['d_nm']:8.2f} nm "
               f"+- {rows[-1]['d_err_nm']:5.2f}  n589={n589:.4f}  rms={r['rms']:.4f}")
-    RESULTS.mkdir(parents=True, exist_ok=True)
+    results = Path(out_dir) if out_dir else RESULTS
+    results.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(rows)
-    df.to_csv(RESULTS / "summary.csv", index=False, encoding="utf-8")
+    df.to_csv(results / "summary.csv", index=False, encoding="utf-8")
     doc = {
         "generated": datetime.now().isoformat(timespec="seconds"),
         "stack": stack,
         "stack_file": str(stack_yaml),
         "samples": payload,
     }
-    (RESULTS / "results.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
-    print(f"\nwrote {RESULTS/'summary.csv'} and {RESULTS/'results.json'}")
+    (results / "results.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    print(f"\nwrote {(results / 'summary.csv').resolve()} and {(results / 'results.json').resolve()}")
 
 if __name__ == "__main__":
     import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--stack", default=None)
-    ap.add_argument("--spe", nargs="*", default=None)
+    ap = argparse.ArgumentParser(
+        description="批量拟合 .spe → ./results/summary.csv + results.json")
+    ap.add_argument("--stack", default=None,
+                    help="堆叠定义 YAML（默认代码包内 stacks/sio2_on_si.yaml）")
+    ap.add_argument("--spe", nargs="*", default=None,
+                    help="要拟合的 .spe 文件（默认 CWD 下 data/RAW-DATA 递归扫描）")
+    ap.add_argument("--out", default=None,
+                    help="输出目录（默认 ./results，CWD 相对）")
     a = ap.parse_args()
-    main(a.stack, a.spe)
+    main(a.stack, a.spe, a.out)

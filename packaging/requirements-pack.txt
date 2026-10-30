@@ -1,0 +1,10 @@
+# 桌面打包环境依赖（CI 与本地打包共用；干净 venv Python 3.12，宽松下限勿 pin 死开发机版本）
+numpy>=1.26
+scipy>=1.11
+pandas>=2.1
+plotly>=5.18
+streamlit>=1.66
+pyyaml>=6.0
+platformdirs>=4.0
+pywebview>=5.0
+pyinstaller>=6.0

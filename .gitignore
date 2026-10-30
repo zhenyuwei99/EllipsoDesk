@@ -4,6 +4,7 @@ __pycache__/
 ellipsodesk/materials/
 ellipsodesk/results/
 .trash/
+results/
 data/
 *.egg-info/
 build/

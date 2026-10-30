@@ -10,14 +10,15 @@ ellipsodesk/
              material_lib si_data psi_display run_analysis make_report calibrate_single
   gui/       fit_app.py + file_explorer.py（CCv2 双面板浏览器）
   stacks/    堆叠定义 YAML（如 sio2_on_si.yaml）
-packaging/         桌面打包三件套（spec/图标/构建脚本，阶段 2 创建）
+packaging/         桌面打包三件套：launcher.py（入口）/ launcher.spec（PyInstaller）/ requirements-pack.txt
 .github/workflows/ CI build.yml（macOS arm64 / Windows x64 双平台）
 ```
-`data/`（原始 spe）与 `analysis/`（materials/、results/ 本地材料与历史结果）不入库。已知断链（双路径并存，阶段 2 platformdirs 迁移统一修复）：material_lib.MATERIALS_DIR 指向代码包内 ellipsodesk/materials——git 克隆后不存在（gitignore 排除），ensure_base_materials() 启动自动重建，材料的**列表/查看/保存**链路有效；fit_app 侧 4 处（make_preset_layer 插入、材料文档读取、mat_rename、mat_delete）走 `ROOT/analysis/materials`（ROOT=仓库根，该路径**不存在**）——双击插入**静默失败**（_insert_material 吞 FileNotFoundError，阶段 2 一并加失败提示）。
+`data/`（原始 spe）与 `analysis/`（materials/、results/ 本地材料与历史结果）不入库。材料库自阶段 2 落 platformdirs 用户数据目录（macOS `~/Library/Application Support/EllipsoDesk/materials`、Windows `%APPDATA%\EllipsoDesk\materials`，单一真源 `material_lib.MATERIALS_DIR`）；代码包内 `ellipsodesk/materials/` 仅作一次性迁移源（用户材料=非 base-*.json 首次导入时拷入新目录，base 基料由 ensure_base_materials() 自动重建）——原双路径断链（R1 BLOCKING-1）已消除。CLI 输出基准 = CWD 相对 `./results/`（--out 可覆盖，R1 ADV-2）；GUI Explorer 浏览根 = 用户主目录，上次目录持久化于用户数据目录 last_dir.json（R1 ADV-5）。
 
 ## §2 运行与分发
-- 开发：GUI `streamlit run ellipsodesk/gui/fit_app.py`；批量 `python ellipsodesk/scripts/run_analysis.py` → `python ellipsodesk/scripts/make_report.py`
-- 桌面分发：packaging/ 三件套 + CI 构建；用户数据目录（阶段 2 切入 platformdirs）：macOS `~/Library/Application Support/EllipsoDesk`、Windows `%APPDATA%\EllipsoDesk`
+- 开发：GUI `streamlit run ellipsodesk/gui/fit_app.py`；批量 `python ellipsodesk/scripts/run_analysis.py` → `python ellipsodesk/scripts/make_report.py`（输入默认 CWD `./data/RAW-DATA`、输出 → CWD `./results/`，`--spe`/`--out` 可覆盖）
+- 窗口启动（开发态也可）：`python packaging/launcher.py` —— 自动选空闲端口在 daemon 线程拉起 Streamlit，就绪后开 pywebview 窗口；无 pywebview 时退化为系统浏览器 + 阻塞陪跑。**macOS 上 pywebview 必须主线程 start()**（打包契约，实现细节见 packaging/launcher.py 头注）
+- 桌面分发：packaging/ 三件套 + CI 构建；用户数据目录（platformdirs）：macOS `~/Library/Application Support/EllipsoDesk`、Windows `%APPDATA%\EllipsoDesk`
 - 无签名首次运行：macOS 右键打开或 `xattr -cr EllipsoDesk.app`；Windows SmartScreen「仍要运行」
 
 ## §3 .spe 格式（解析契约）
@@ -55,7 +56,7 @@ packaging/         桌面打包三件套（spec/图标/构建脚本，阶段 2 �
 - 结果区：三列 vertical_alignment="center"——st.metric 厚度卡片（用户明确偏好：±err 与数值同行、药丸 delta_arrow="off"、药丸字号=数值 2.25rem）、参数 dataframe（行高精确 35px/行 + 表头 38px）、保存材料按钮；Ψ·Δ 叠加只画 [E_min,E_max] 窗口内、模型线用 2× 细网格；χ²ᵣ/rms 只在 col1 显示
 - 弹窗规则：开关由 session_state.dialog 驱动，按钮 on_click 先种默认值；所有弹窗必须 on_dismiss=_clear_dialog（✕/ESC/点遮罩不通知 Python）；控件值必须 None 兜底；参数控件 key 含模型名（dlg_pv_{model}_{p}，切模型自动重置）；层用稳定唯一 ID 做 key（禁止列表索引）；编辑弹窗零按钮即时生效；确认按钮 = 改状态 → dialog=None → st.rerun()
 - 层初始化用 `if "layers" not in session_state`（禁止 `if not layers`，删空会被误判未初始化而自动补层）；空堆叠拟合按钮禁用 + main 级守卫；列表变动后 _enforce_top_rough() 摘除非顶层 rough 并 toast（同帧消费）
-- 侧栏 = CCv2 compact_browser 单挂载 dual_explorer：高度禁止 height="stretch" 与整型挂载——JS 给根元素设固定像素 root.style.height=data.height_px，height_px=视口高−64、下限 400；双击时序：单击延迟 260ms 发 select（可取消）、400ms 内第二次点击发 open，点击状态存 root._clicks；事件经 _on_fx_event 分发；文件删除走 ROOT/.trash/ 回收站
+- 侧栏 = CCv2 compact_browser 单挂载 dual_explorer：高度禁止 height="stretch" 与整型挂载——JS 给根元素设固定像素 root.style.height=data.height_px，height_px=视口高−64、下限 400；双击时序：单击延迟 260ms 发 select（可取消）、400ms 内第二次点击发 open，点击状态存 root._clicks；事件经 _on_fx_event 分发；文件删除走 ROOT/.trash/ 回收站（ROOT=Explorer 根=用户主目录，阶段 2 起）
 - 材料插入按 JSON kind 分流：base→make_base_layer（参数全 fit + FFT d 换算），calibrated→make_preset_layer（参数全 fixed、fit 仅 ["thickness"]）；保存成功提示同帧消费（AppTest 断言查文件非 session_state）
 - 侧栏 CSS：stSidebarHeader 绝对定位使收起箭头与标题同行、h1–h3 加 padding-right；主容器 padding-top 压缩（依赖 data-testid，Streamlit 升级失效按新版更新）
 - 数据预览 Ψ 展开用每文件缓存参考拟合（get_preview_model），不画折叠 Ψ 原始值
@@ -67,6 +68,6 @@ packaging/         桌面打包三件套（spec/图标/构建脚本，阶段 2 �
 - 表面粗糙层 v1：仅顶层、EMA(50% void + 本层材料)、d∈[0,10] nm、f 固定 0.5（与 d_rough 强简并勿放开）；保存材料自动忽略 rough（粗糙度是样品属性）
 
 ## §8 Python 环境与测试策略
-- 开发：conda env experiment（Python 3.14；numpy/scipy/pandas/matplotlib/plotly/streamlit/pyyaml/platformdirs 齐备，无 lmfit）；打包：干净 venv Python 3.12
+- 开发：conda env experiment（Python 3.14；numpy/scipy/pandas/matplotlib/plotly/streamlit/pyyaml/platformdirs 齐备，无 lmfit）；打包：干净 venv Python 3.12（依赖见 packaging/requirements-pack.txt）
 - 测试：streamlit.testing.v1.AppTest 无浏览器跑通全流程（选文件→弹窗加层→弹窗编辑→拟合）；弹窗内控件用 at.get_by_key 寻址（segmented_control 可 set_value）
 - 测试边界：组件 JS 交互 AppTest 驱动不了——事件分发/操作函数直调单测 + 整页无异常冒烟，浏览器行为靠手测
