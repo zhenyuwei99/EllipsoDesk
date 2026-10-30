@@ -56,7 +56,7 @@ packaging/         桌面打包三件套：launcher.py（入口）/ launcher.spe
 - 结果区：三列 vertical_alignment="center"——st.metric 厚度卡片（用户明确偏好：±err 与数值同行、药丸 delta_arrow="off"、药丸字号=数值 2.25rem）、参数 dataframe（行高精确 35px/行 + 表头 38px）、保存材料按钮；Ψ·Δ 叠加只画 [E_min,E_max] 窗口内、模型线用 2× 细网格；χ²ᵣ/rms 只在 col1 显示
 - 弹窗规则：开关由 session_state.dialog 驱动，按钮 on_click 先种默认值；所有弹窗必须 on_dismiss=_clear_dialog（✕/ESC/点遮罩不通知 Python）；控件值必须 None 兜底；参数控件 key 含模型名（dlg_pv_{model}_{p}，切模型自动重置）；层用稳定唯一 ID 做 key（禁止列表索引）；编辑弹窗零按钮即时生效；确认按钮 = 改状态 → dialog=None → st.rerun()
 - 层初始化用 `if "layers" not in session_state`（禁止 `if not layers`，删空会被误判未初始化而自动补层）；空堆叠拟合按钮禁用 + main 级守卫；列表变动后 _enforce_top_rough() 摘除非顶层 rough 并 toast（同帧消费）
-- 侧栏 = CCv2 compact_browser 单挂载 dual_explorer：高度禁止 height="stretch" 与整型挂载——JS 给根元素设固定像素 root.style.height=data.height_px，height_px=视口高−64、下限 400；双击时序：单击延迟 260ms 发 select（可取消）、400ms 内第二次点击发 open，点击状态存 root._clicks；事件经 _on_fx_event 分发；文件删除走 ROOT/.trash/ 回收站（ROOT=Explorer 根=用户主目录，阶段 2 起）
+- 侧栏 = CCv2 compact_browser 单挂载 dual_explorer：高度禁止 height="stretch" 与整型挂载——JS 给根元素设固定像素 root.style.height=data.height_px，height_px=视口高−64、下限 400；双击时序：单击延迟 260ms 发 select（可取消）、400ms 内第二次点击发 open，点击状态存 root._clicks；事件经 _on_fx_event 分发；文件/材料删除统一走 DATA_DIR/.trash 回收站（platformdirs 用户数据目录，不污染主目录；_to_trash 有 _in_root 守卫，仅允许移动 Explorer 根内路径）
 - 材料插入按 JSON kind 分流：base→make_base_layer（参数全 fit + FFT d 换算），calibrated→make_preset_layer（参数全 fixed、fit 仅 ["thickness"]）；保存成功提示同帧消费（AppTest 断言查文件非 session_state）
 - 侧栏 CSS：stSidebarHeader 绝对定位使收起箭头与标题同行、h1–h3 加 padding-right；主容器 padding-top 压缩（依赖 data-testid，Streamlit 升级失效按新版更新）
 - 数据预览 Ψ 展开用每文件缓存参考拟合（get_preview_model），不画折叠 Ψ 原始值

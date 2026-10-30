@@ -376,8 +376,10 @@ def _paste_clip():
 
 
 def _to_trash(p):
-    trash = ROOT / ".trash"
-    trash.mkdir(exist_ok=True)
+    if not _in_root(p):  # 守卫:仅移动 Explorer 根(用户主目录)内路径;材料目录亦在其下
+        raise ValueError(f"拒绝移动根目录外路径: {p}")
+    trash = DATA_DIR / ".trash"
+    trash.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     target = trash / f"{ts}_{p.name}"
     k = 1
@@ -572,7 +574,7 @@ def rename_dialog(path):
 @st.dialog("删除", width="small", on_dismiss=_clear_dialog)
 def delete_dialog(path):
     p = Path(path)
-    st.warning(f"将把 **{p.name}** 移入回收站 `.trash/`（可手动找回），不会真正删除。")
+    st.warning(f"将把 **{p.name}** 移入回收站（用户数据目录 `.trash/`，可手动找回），不会真正删除。")
     if st.button("确认移入回收站", icon=":material/delete:", type="primary", key="del_ok"):
         _to_trash(p)
         if st.session_state.get("spe_selected") == str(p):
@@ -608,7 +610,7 @@ def mat_delete_dialog(name):
         is_base = False
     if is_base:
         st.caption("内置基料（文献典型初值）——删除后下次启动自动重建。")
-    st.warning(f"将把材料 **{name}** 移入回收站 `.trash/`（可手动找回）。")
+    st.warning(f"将把材料 **{name}** 移入回收站（用户数据目录 `.trash/`，可手动找回）。")
     if st.button("确认移入回收站", icon=":material/delete:", type="primary", key="mdel_ok"):
         _to_trash(MATERIALS_DIR / f"{name}.json")
         st.session_state.dialog = None

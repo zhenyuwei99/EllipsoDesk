@@ -45,8 +45,10 @@ def _start_server(script: Path, port: int) -> threading.Thread:
     """Streamlit 服务器线程（daemon：主进程退出即随之结束）。
 
     streamlit ≥1.4x 的 bootstrap 在协程内 signal.signal(SIGTERM, …)，而 Python 信号只允许
-    主线程注册——非主线程直跑 stcli.main() 会 ValueError 直接夭折。服务器线程的生命周期
-    本就由本进程 os._exit() 兜底管理，无需信号 → 线程内临时禁用注册。
+    主线程注册——非主线程直跑 stcli.main() 会 ValueError 直接夭折。此处把 signal.signal
+    置为 no-op：stcli.main() 阻塞不返回，下方 finally 的恢复实际不会执行，即该
+    monkey-patch 作用域为**进程全程**（桌面单进程 + os._exit 退出模型下无害；进程生命
+    周期本就由 os._exit() 兜底管理，无需信号——改架构前先理解这一点）。
     """
     def run():
         import signal
