@@ -1,0 +1,14 @@
+name: sio2_on_si
+angle_deg: 70
+eV_min: 1.2
+eV_max: 5.5
+layers:
+  - name: sio2
+    model: cauchy
+    fit: [thickness, A, B, C]
+    init:
+      thickness: 1030
+      A: 1.45
+      B: 0.004
+      C: 0.00001
+substrate: si
