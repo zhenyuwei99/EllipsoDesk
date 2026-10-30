@@ -8,7 +8,10 @@
 - 空闲端口用 socket bind(("127.0.0.1", 0)) 取号后关闭（存在极小竞争窗口，可接受）；
 - 就绪判定：轮询 /_stcore/health 至返回 ok（超时 60s）；
 - 窗口全部关闭后 os._exit(0) 硬杀——tornado 有非守护线程不会自然退出；
-- 启动期信息打 stderr（窗口模式下不可见；frozen 且无 pywebview 时有用）。
+- 启动期信息打 stderr（窗口模式下不可见；frozen 且无 pywebview 时有用）；
+- 冒烟逃生口：环境变量 ELLIPSODESK_NO_WINDOW=1（CI 无显示环境用）——就绪后不开窗口，
+  stdout 打印 "PORT {port}"（脚本解析动态端口）与 "SMOKE_OK http://…/_stcore/health"
+  （确定性健康检查信号）后 os._exit(0)；日志行均 flush（os._exit 不冲缓冲）。
 """
 import os
 import socket
@@ -83,15 +86,22 @@ def _wait_ready(port: int, timeout: float = HEALTH_TIMEOUT_S) -> bool:
 
 
 def main() -> None:
+    smoke = os.environ.get("ELLIPSODESK_NO_WINDOW") == "1"
     script = _locate_fit_app()
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
     print(f"[EllipsoDesk] streamlit: {url}  ({script})", file=sys.stderr)
+    if smoke:
+        print(f"PORT {port}", flush=True)   # 先行端口行：CI 脚本据此 curl 动态端口
 
     server = _start_server(script, port)
     if not _wait_ready(port):
         print(f"[EllipsoDesk] server not ready within {HEALTH_TIMEOUT_S:.0f}s, abort", file=sys.stderr)
         os._exit(1)
+
+    if smoke:  # 无显示环境：确定性健康检查后即退，不开窗口
+        print(f"SMOKE_OK {url}/_stcore/health", flush=True)
+        os._exit(0)
 
     try:
         import webview  # noqa: F401

@@ -26,8 +26,6 @@ EllipsoDesk 是一个光谱椭偏数据多层膜厚拟合工具：读取 Horiba 
 - **macOS**：应用未做签名公证，首次打开需右键点击 →「打开」，或在终端执行 `xattr -cr /Applications/EllipsoDesk.app` 后再启动
 - **Windows**：SmartScreen 拦截时点击「更多信息」→「仍要运行」
 
-> CI 自动构建与 Releases 资产由后续 GitHub Actions 工作流产出；当前请从源码运行（见下方开发者指南）。
-
 ## 开发者指南
 
 ### 环境要求
@@ -76,7 +74,7 @@ EllipsoDesk/
 │   ├── gui/            # Streamlit 工作台（fit_app.py + 文件浏览器组件）
 │   └── stacks/         # 多层堆叠定义 YAML
 ├── packaging/          # 桌面应用打包：launcher.py（启动入口）/ launcher.spec（PyInstaller）/ requirements-pack.txt
-├── .github/workflows/  # CI：双平台构建发布（阶段 3 创建 build.yml）
+├── .github/workflows/  # CI（build.yml：macOS arm64 / Windows x64 双平台构建 + 冒烟 + tag 发版）
 ├── AGENTS.md           # 项目契约：格式规格 / 拟合引擎 / GUI 契约 / 已知边界
 ├── README.md
 └── .gitignore

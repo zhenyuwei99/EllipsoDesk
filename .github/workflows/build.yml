@@ -1,0 +1,169 @@
+# EllipsoDesk CI：test（代码级拦截）→ build（双平台冻结 + 冒烟）→ release（仅 tag v*）。
+# 冒烟门槛 = 冻结产物 stdout 出现 SMOKE_OK（launcher ELLIPSODESK_NO_WINDOW=1 逃生口）。
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash   # Windows 默认也走 bash（Git Bash），pip/pyinstaller/打包命令两平台统一
+
+jobs:
+  # ── Job A：代码级快速拦截（py_compile / 引擎 import / AppTest 无异常）──────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: packaging/requirements-pack.txt
+      - name: 安装依赖
+        run: pip install -r packaging/requirements-pack.txt
+      - name: py_compile 全量受控 .py
+        run: python -m py_compile $(git ls-files '*.py')
+      - name: 引擎模块 import 测试
+        run: python -c "import sys; sys.path.insert(0,'ellipsodesk/scripts'); import spe_parser,tmm,dispersion,fit,stack_fit,material_lib,si_data,psi_display"
+      - name: AppTest 无异常冒烟
+        run: |
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+          at = AppTest.from_file('ellipsodesk/gui/fit_app.py', default_timeout=300)
+          at.run()
+          assert not at.exception
+          print('APPTEST_OK')
+          PY
+
+  # ── Job B：双平台冻结产物 + SMOKE_OK 冒烟（R2 ADV-6 验收门槛）────────────────
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: packaging/requirements-pack.txt
+      - name: 安装依赖
+        run: pip install -r packaging/requirements-pack.txt
+      - name: PyInstaller 冻结（两平台同命令）
+        run: pyinstaller packaging/launcher.spec --noconfirm --clean
+
+      - name: 冒烟（macOS：解析 PORT 行 → curl health → 等 SMOKE_OK）
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        run: |
+          ELLIPSODESK_NO_WINDOW=1 ./dist/EllipsoDesk/EllipsoDesk > smoke.log 2>&1 &
+          pid=$!
+          deadline=$((SECONDS + 180))
+          result=fail
+          while [ $SECONDS -lt $deadline ]; do
+            if grep -q '^SMOKE_OK' smoke.log 2>/dev/null; then result=pass; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then
+              sleep 1
+              if grep -q '^SMOKE_OK' smoke.log 2>/dev/null; then result=pass; fi
+              break
+            fi
+            port=$(sed -n 's/^PORT \([0-9][0-9]*\)$/\1/p' smoke.log | head -n1)
+            if [ -n "$port" ]; then
+              if curl -sf "http://127.0.0.1:${port}/_stcore/health" >/dev/null; then
+                echo "[smoke] health ok on port $port (pre-SMOKE_OK)"
+              fi
+            fi
+            sleep 2
+          done
+          pkill -f 'dist/EllipsoDesk' || true
+          sleep 1
+          if [ "$result" != pass ]; then
+            echo '--- smoke.log ---'; cat smoke.log
+            exit 1
+          fi
+          echo '[smoke] SMOKE_OK verified'
+
+      - name: 冒烟（Windows：轮询 smoke.log 等 SMOKE_OK，冻结首启慢 300s 上限）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 7
+        run: |
+          $env:ELLIPSODESK_NO_WINDOW = '1'
+          $p = Start-Process -FilePath "dist\EllipsoDesk\EllipsoDesk.exe" `
+            -RedirectStandardOutput smoke.log -RedirectStandardError smoke.err -PassThru
+          $deadline = (Get-Date).AddSeconds(300)
+          $ok = $false
+          while ((Get-Date) -lt $deadline) {
+            try {
+              if ((Test-Path smoke.log) -and (Select-String -Path smoke.log -Pattern '^SMOKE_OK' -Quiet)) { $ok = $true; break }
+            } catch { }
+            if ($p.HasExited) {
+              Start-Sleep -Seconds 1
+              try {
+                if ((Test-Path smoke.log) -and (Select-String -Path smoke.log -Pattern '^SMOKE_OK' -Quiet)) { $ok = $true }
+              } catch { }
+              break
+            }
+            Start-Sleep -Seconds 3
+          }
+          try { Stop-Process -Name EllipsoDesk -Force -ErrorAction SilentlyContinue } catch { }
+          if (-not $ok) {
+            if (Test-Path smoke.log) { Write-Output '--- smoke.log ---'; Get-Content smoke.log }
+            if (Test-Path smoke.err) { Write-Output '--- smoke.err ---'; Get-Content smoke.err }
+            exit 1
+          }
+          Write-Output '[smoke] SMOKE_OK verified'
+
+      - name: 打包 zip（macOS arm64）
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/EllipsoDesk "EllipsoDesk-${{ runner.os }}-arm64.zip"
+      - name: 打包 zip（Windows x64）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist\EllipsoDesk -DestinationPath "EllipsoDesk-${{ runner.os }}-x64.zip"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: EllipsoDesk-${{ matrix.os }}
+          path: EllipsoDesk-*.zip
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: 上传冒烟日志（失败排查凭据）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-log-${{ matrix.os }}
+          path: smoke.*
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ── Job C：tag v* 发版（挂双平台 zip 到 GitHub Release）──────────────────────
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 下载双平台构建产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: EllipsoDesk-*
+          path: release
+          merge-multiple: true
+      - name: 挂 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/EllipsoDesk-*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
