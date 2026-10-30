@@ -8,7 +8,9 @@
 - 空闲端口用 socket bind(("127.0.0.1", 0)) 取号后关闭（存在极小竞争窗口，可接受）；
 - 就绪判定：轮询 /_stcore/health 至返回 ok（超时 60s）；
 - 窗口全部关闭后 os._exit(0) 硬杀——tornado 有非守护线程不会自然退出；
-- 启动期信息打 stderr（窗口模式下不可见；frozen 且无 pywebview 时有用）；
+- 启动期信息打 stderr；**冻结态**（sys.frozen，console=False 下 stderr 不可见）且非冒烟时
+  stderr 重定向到 platformdirs 用户数据目录 logs/launcher.log（append 一行时间戳，不轮转），
+  排查冻结产物问题先看它——含 PORT {port} 行；
 - 冒烟逃生口：环境变量 ELLIPSODESK_NO_WINDOW=1（CI 无显示环境用）——就绪后不开窗口，
   stdout 打印 "PORT {port}"（脚本解析动态端口）与 "SMOKE_OK http://…/_stcore/health"
   （确定性健康检查信号）后 os._exit(0)；日志行均 flush（os._exit 不冲缓冲）。
@@ -42,6 +44,27 @@ def _free_port() -> int:
     port = s.getsockname()[1]
     s.close()
     return port
+
+
+def _redirect_stderr_to_log() -> Path | None:
+    """冻结态 stderr 落盘（R2 ADV-4）：console=False 的 .app/.exe 无控制台，stderr 不可见。
+
+    重定向到 platformdirs 用户数据目录 logs/launcher.log（与 material_lib.DATA_DIR 同根、
+    单独计算以免开发态也要摆弄 sys.path）；启动 append 一行时间戳分隔（不轮转）。
+    任何异常（目录不可写等）都吞掉、保留原 stderr——日志是锦上添花，不能拖垮启动。
+    """
+    try:
+        import platformdirs
+        log_dir = Path(platformdirs.user_data_dir("EllipsoDesk", appauthor=False)) / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "launcher.log"
+        fh = open(log_path, "a", buffering=1)  # 行缓冲：os._exit 不冲缓冲
+        fh.write(f"==== {time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()} ====\n")
+        sys.stderr = fh
+        return log_path
+    except Exception as exc:  # pragma: no cover - 兜底分支
+        print(f"[EllipsoDesk] stderr log redirect failed: {exc!r}", file=sys.__stderr__, flush=True)
+        return None
 
 
 def _start_server(script: Path, port: int) -> threading.Thread:
@@ -87,12 +110,17 @@ def _wait_ready(port: int, timeout: float = HEALTH_TIMEOUT_S) -> bool:
 
 def main() -> None:
     smoke = os.environ.get("ELLIPSODESK_NO_WINDOW") == "1"
+    # 冒烟模式绝不重定向（CI 从 stdout/stderr 读 PORT/SMOKE_OK），保持原样
+    if getattr(sys, "frozen", False) and not smoke:
+        _redirect_stderr_to_log()
     script = _locate_fit_app()
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
     print(f"[EllipsoDesk] streamlit: {url}  ({script})", file=sys.stderr)
     if smoke:
-        print(f"PORT {port}", flush=True)   # 先行端口行：CI 脚本据此 curl 动态端口
+        print(f"PORT {port}", flush=True)   # 先行端口行：CI 脚本据此 curl 动态端口（stdout 契约）
+    else:
+        print(f"PORT {port}", file=sys.stderr, flush=True)  # 冻结态随 stderr 落 launcher.log
 
     server = _start_server(script, port)
     if not _wait_ready(port):
@@ -108,7 +136,11 @@ def main() -> None:
     except ImportError:
         # 开发环境/精简安装无 pywebview：退化系统浏览器，主线程阻塞陪跑服务器线程
         print(f"[EllipsoDesk] pywebview unavailable, opening system browser: {url}", file=sys.stderr)
-        webbrowser.open(url)
+        if not webbrowser.open(url):
+            # R2 ADV-5：open 失败（返回 False）必须明示，不得静默陪跑
+            msg = f"[EllipsoDesk] 无法打开浏览器，请手动访问 {url}（Ctrl-C 退出）"
+            print(msg, flush=True)                  # stdout：冻结态 console=True 时可见
+            print(msg, file=sys.stderr, flush=True)  # stderr：冻结态落 launcher.log
         server.join()
         return
 

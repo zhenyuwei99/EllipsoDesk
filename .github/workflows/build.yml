@@ -12,6 +12,9 @@ defaults:
   run:
     shell: bash   # Windows 默认也走 bash（Git Bash），pip/pyinstaller/打包命令两平台统一
 
+permissions:
+  contents: read  # 顶层默认最小权限（R3 ADV-2）；release job 自行覆盖 contents: write
+
 jobs:
   # ── Job A：代码级快速拦截（py_compile / 引擎 import / AppTest 无异常）──────────
   test:
@@ -146,7 +149,7 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # ── Job C：tag v* 发版（挂双平台 zip 到 GitHub Release）──────────────────────
+  # ── Job C：tag v* 发版（重命名 EllipsoDesk-<tag>-{macos-arm64,windows-x64}.zip 挂 Release）──
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
@@ -160,6 +163,12 @@ jobs:
           pattern: EllipsoDesk-*
           path: release
           merge-multiple: true
+      - name: 重命名发布资产（含版本；源 zip 名含 matrix os）
+        run: |
+          ls -l release/
+          mv "release/EllipsoDesk-macOS-arm64.zip"   "release/EllipsoDesk-${{ github.ref_name }}-macos-arm64.zip"
+          mv "release/EllipsoDesk-Windows-x64.zip"   "release/EllipsoDesk-${{ github.ref_name }}-windows-x64.zip"
+          ls -l release/
       - name: 挂 Release
         uses: softprops/action-gh-release@v2
         with:

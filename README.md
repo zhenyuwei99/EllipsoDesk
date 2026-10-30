@@ -16,15 +16,16 @@ EllipsoDesk 是一个光谱椭偏数据多层膜厚拟合工具：读取 Horiba 
 
 ## 下载使用
 
-从 [GitHub Releases](https://github.com/zhenyuwei99/EllipsoDesk/releases) 下载对应平台安装包：
+从 [GitHub Releases](https://github.com/zhenyuwei99/EllipsoDesk/releases) 下载对应平台压缩包（onedir 绿色版，解压即用、免安装）：
 
 | 平台 | 文件 |
 |---|---|
-| macOS (Apple Silicon) | `EllipsoDesk-<版本>-arm64.dmg` |
-| Windows x64 | `EllipsoDesk-<版本>-setup.exe` / `.zip` |
+| macOS (Apple Silicon) | `EllipsoDesk-v<版本>-macos-arm64.zip` |
+| Windows x64 | `EllipsoDesk-v<版本>-windows-x64.zip` |
 
-- **macOS**：应用未做签名公证，首次打开需右键点击 →「打开」，或在终端执行 `xattr -cr /Applications/EllipsoDesk.app` 后再启动
-- **Windows**：SmartScreen 拦截时点击「更多信息」→「仍要运行」
+- **macOS**：解压 zip 得 `EllipsoDesk/` 文件夹，运行其中的 `EllipsoDesk` 可执行文件。应用未做签名公证，首次运行被 Gatekeeper 拦截时：右键 `EllipsoDesk` →「打开」，或对解压目录执行 `xattr -cr EllipsoDesk` 后再启动
+- **Windows**：解压 zip，运行 `EllipsoDesk\EllipsoDesk.exe`；SmartScreen 拦截时点击「更多信息」→「仍要运行」
+- 开发者可从 [Actions](https://github.com/zhenyuwei99/EllipsoDesk/actions) 页获取每次 push 的构建 artifact（保留 14 天）
 
 ## 开发者指南
 
@@ -60,7 +61,7 @@ python -m venv .venv-pack && source .venv-pack/bin/activate   # Windows: .venv-p
 pip install -r packaging/requirements-pack.txt
 pyinstaller packaging/launcher.spec
 # 产物：dist/EllipsoDesk/（onedir；launcher 自动选空闲端口拉起内嵌 Streamlit 并开 pywebview 窗口）
-# macOS 的 .app/.dmg 与 Windows 安装包封装由 CI 负责
+# 推送 tag v* 后 CI 自动把双平台 zip 重命名为 EllipsoDesk-<tag>-{macos-arm64,windows-x64}.zip 挂到 GitHub Release
 ```
 
 开发态也可直接 `python packaging/launcher.py` 拉起窗口（无 pywebview 时自动退化为系统浏览器）。

@@ -17,10 +17,12 @@ packaging/         桌面打包三件套：launcher.py（入口）/ launcher.spe
 
 ## §2 运行与分发
 - 开发：GUI `streamlit run ellipsodesk/gui/fit_app.py`；批量 `python ellipsodesk/scripts/run_analysis.py` → `python ellipsodesk/scripts/make_report.py`（输入默认 CWD `./data/RAW-DATA`、输出 → CWD `./results/`，`--spe`/`--out` 可覆盖）
-- 窗口启动（开发态也可）：`python packaging/launcher.py` —— 自动选空闲端口在 daemon 线程拉起 Streamlit，就绪后开 pywebview 窗口；无 pywebview 时退化为系统浏览器 + 阻塞陪跑。**macOS 上 pywebview 必须主线程 start()**（打包契约，实现细节见 packaging/launcher.py 头注）；环境变量 `ELLIPSODESK_NO_WINDOW=1` = 无头冒烟模式（CI 专用：不开窗口，stdout 打 `PORT {port}` 与 `SMOKE_OK …` 两行后 os._exit(0)）
+- 窗口启动（开发态也可）：`python packaging/launcher.py` —— 自动选空闲端口在 daemon 线程拉起 Streamlit，就绪后开 pywebview 窗口；无 pywebview 时退化为系统浏览器 + 阻塞陪跑（`webbrowser.open` 返回 False 时打印「无法打开浏览器，请手动访问 {url}」后继续 join，不静默陪跑）。**macOS 上 pywebview 必须主线程 start()**（打包契约，实现细节见 packaging/launcher.py 头注）；环境变量 `ELLIPSODESK_NO_WINDOW=1` = 无头冒烟模式（CI 专用：不开窗口，stdout 打 `PORT {port}` 与 `SMOKE_OK …` 两行后 os._exit(0)）
+- 冻结态日志（排查冻结产物问题**先看它**）：`sys.frozen` 且非冒烟时 launcher 把 stderr 重定向到 `DATA_DIR/logs/launcher.log`（macOS `~/Library/Application Support/EllipsoDesk/logs/`、Windows `%APPDATA%\EllipsoDesk\logs\`；每次启动 append 一行时间戳，不轮转）——含 `PORT {port}` 行，console=False 下窗口模式的端口/报错都在这里；冒烟模式不重定向（CI 要读 stdout/stderr）
 - 桌面分发：packaging/ 三件套 + CI 构建；用户数据目录（platformdirs）：macOS `~/Library/Application Support/EllipsoDesk`、Windows `%APPDATA%\EllipsoDesk`
+- 发布资产命名（tag `v*` → release job 重命名后挂 GitHub Release）：`EllipsoDesk-<tag>-macos-arm64.zip` / `EllipsoDesk-<tag>-windows-x64.zip`（onedir zip，解压即用；**无** dmg/setup.exe）
 - CI（`.github/workflows/build.yml`）：push main / `workflow_dispatch` / push tag `v*` 触发，三 job——`test`（ubuntu py3.12：py_compile 全量 + 引擎模块 import + AppTest 无异常）→ `build`（macOS + Windows py3.12：PyInstaller 冻结 + 冒烟门槛 = 冻结产物 stdout 出现 `SMOKE_OK`（动态端口先打 `PORT {port}` 行供脚本解析）；产物 zip artifact 保留 14 天，失败时附 smoke.log）→ `release`（仅 tag `v*`：双平台 zip 挂 GitHub Release + 自动 release notes）
-- 无签名首次运行：macOS 右键打开或 `xattr -cr EllipsoDesk.app`；Windows SmartScreen「仍要运行」
+- 无签名首次运行（产物是 onedir zip 解压出的 `EllipsoDesk/` 目录，非 .app/.exe 安装包）：macOS 右键打开或 `xattr -cr EllipsoDesk`；Windows SmartScreen「仍要运行」
 
 ## §3 .spe 格式（解析契约）
 - ISO-8859 文本 + CRLF：必须 `open(..., encoding='latin-1')`（° 字符 UTF-8 报错）
